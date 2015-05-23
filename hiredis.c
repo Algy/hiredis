@@ -49,6 +49,13 @@ static void *createArrayObject(const redisReadTask *task, int elements);
 static void *createIntegerObject(const redisReadTask *task, long long value);
 static void *createNilObject(const redisReadTask *task);
 
+/* 
+ * Lightweight Coroutine Hooks
+ */
+void (*redisCoroutineReadHook)(redisContext*) = NULL;
+void (*redisCoroutineWriteHook)(redisContext*) = NULL;
+
+
 /* Default set of functions to build the reply. Keep in mind that such a
  * function returning NULL is interpreted as OOM. */
 static redisReplyObjectFunctions defaultFunctions = {
@@ -803,6 +810,8 @@ int redisBufferRead(redisContext *c) {
     if (nread == -1) {
         if ((errno == EAGAIN && !(c->flags & REDIS_BLOCK)) || (errno == EINTR)) {
             /* Try again later */
+            if (redisCoroutineReadHook)
+                redisCoroutineReadHook(c);
         } else {
             __redisSetError(c,REDIS_ERR_IO,NULL);
             return REDIS_ERR;
@@ -840,6 +849,8 @@ int redisBufferWrite(redisContext *c, int *done) {
         if (nwritten == -1) {
             if ((errno == EAGAIN && !(c->flags & REDIS_BLOCK)) || (errno == EINTR)) {
                 /* Try again later */
+                if (redisCoroutineWriteHook)
+                    redisCoroutineWriteHook(c);
             } else {
                 __redisSetError(c,REDIS_ERR_IO,NULL);
                 return REDIS_ERR;
